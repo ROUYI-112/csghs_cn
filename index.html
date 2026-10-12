@@ -36,6 +36,11 @@ button:focus-visible{outline:3px solid var(--persimmon);outline-offset:2px}
 .seeds{display:flex;gap:6px}
 .seeds i{width:12px;height:12px;border-radius:50%;display:block}
 .scope{display:flex;flex-wrap:wrap;gap:8px}
+.scope-wrap{display:flex;flex-direction:column;gap:8px}
+.scope-wrap small{font-size:.85rem;color:var(--deep)}
+.scope button{font-size:.92rem;padding:6px 14px;border-radius:999px;border:2px solid transparent;background:rgba(251,246,238,.85);color:var(--deep);font-weight:500;transition:border-color .15s,transform .15s}
+.scope button:hover{border-color:var(--persimmon);transform:translateY(-2px)}
+.scope button em{font-style:normal;color:var(--persimmon);margin-left:4px}
 .scope span{font-size:.85rem;padding:3px 12px;border-radius:999px;background:rgba(251,246,238,.6);color:var(--deep)}
 .levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .lv{background:var(--paper);border:none;border-radius:20px;padding:16px 16px 16px 18px;text-align:left;display:flex;flex-direction:column;gap:4px;
@@ -207,7 +212,7 @@ function home(){
     <h1>國文段考闖關</h1>
     <p>一次一題，答錯的等一下會再出現，答對才算過關。</p>
   </div><img src="${ART}" alt="插畫"></div>
-  <div class="scope"><span>第一課 飛魚季</span><span>第二課 出師表</span><span>第四課 勞山道士</span></div>
+  <div class="scope-wrap"><small>只想練某一課？點課名：</small><div class="scope">${LESSONS.map(([no,nm])=>`<button class="ls" data-s="${nm}">第${no}課 ${nm}<em>${countLesson(nm)} 題 →</em></button>`).join("")}</div></div>
   <div class="levels">${LEVELS.map((l,i)=>`
     <button class="lv" data-i="${i}" style="--c:${["var(--persimmon)","var(--blossom)","var(--oriole)","var(--sea)","var(--persimmon)","var(--blossom)","var(--oriole)"][i]}">
       <span class="n">第 ${i+1} 關 · ${l.qs.length} 題</span>
@@ -218,13 +223,21 @@ function home(){
   </div>
   <div class="tip"><b>建議玩法</b><br>一次只玩一關，大約 5 分鐘。玩完休息一下，再挑下一關。</div>`;
   app.querySelectorAll(".lv").forEach(b=>b.onclick=()=>start(+b.dataset.i));
+  app.querySelectorAll(".ls").forEach(b=>b.onclick=()=>startLesson(b.dataset.s));
   window.scrollTo(0,0);
 }
 
+const LESSONS=[["一","飛魚季"],["二","出師表"],["四","勞山道士"]];
+const lessonQs=nm=>LEVELS.flatMap(l=>l.qs.filter(q=>q.s===nm).map(q=>l.flash?{...q,f:true}:q));
+const countLesson=nm=>lessonQs(nm).length;
+function startLesson(nm){
+  const no=LESSONS.find(x=>x[1]===nm)[0];
+  run({id:"lesson-"+nm,name:`第${no}課 ${nm} 總複習`,qs:lessonQs(nm)},-1,()=>startLesson(nm));
+}
 let S;
-function start(i){
-  const L = LEVELS[i];
-  S = {i, L, queue: shuffle(L.qs.map((q,k)=>({...q,k}))), total:L.qs.length, cleared:0, firstTry:0, missed:new Set()};
+function start(i){ run(LEVELS[i],i,()=>start(i)); }
+function run(L,i,again){
+  S = {i, L, again, queue: shuffle(L.qs.map((q,n)=>({...q,_id:n}))), total:L.qs.length, cleared:0, firstTry:0, missed:new Set()};
   show();
 }
 function header(){
@@ -236,8 +249,8 @@ function header(){
 function show(){
   if(!S.queue.length) return finish();
   const q = S.queue[0];
-  const retry = S.missed.has(q.k);
-  if(S.L.flash){
+  const retry = S.missed.has(q._id);
+  if(S.L.flash || q.f){
     app.innerHTML = header()+`<div class="card">
       <span class="src">${q.s}</span>${retry?'<span class="again">再看一次</span>':""}
       <div class="q">${q.q}</div>
@@ -249,7 +262,7 @@ function show(){
         <span class="lbl">得分關鍵</span><div class="keys">${q.k.map(x=>`<span>${x}</span>`).join("")}</div></div>
         <div class="row2" style="margin-top:12px"><button class="ghost" id="no">再看一次</button><button class="next" id="yes">我會了</button></div>`;
       $("#yes").onclick=()=>{ if(!retry) S.firstTry++; S.cleared++; S.queue.shift(); show() };
-      $("#no").onclick=()=>{ S.missed.add(q.k); S.queue.push(S.queue.shift()); show() };
+      $("#no").onclick=()=>{ S.missed.add(q._id); S.queue.push(S.queue.shift()); show() };
     };
   } else {
     const order = shuffle(q.o.map((t,j)=>j));
@@ -280,7 +293,7 @@ function pick(q,j,retry){
   $("#nx").onclick=()=>{
     const cur=S.queue.shift();
     if(ok){ S.cleared++; if(!retry) S.firstTry++; }
-    else { S.missed.add(cur.k); S.queue.push(cur); }
+    else { S.missed.add(cur._id); S.queue.push(cur); }
     show();
   };
   $("#nx").focus({preventScroll:true});
@@ -289,7 +302,7 @@ function pick(q,j,retry){
 const pickOne=a=>a[Math.floor(Math.random()*a.length)];
 function finish(){
   done[S.L.id]=true; save();
-  const nextI = S.i+1 < LEVELS.length ? S.i+1 : null;
+  const nextI = S.i>=0 && S.i+1 < LEVELS.length ? S.i+1 : null;
   app.innerHTML = `<div class="card end">
     <img src="${ART}" alt="插畫"><div class="big">過關！</div>
     <h2>${S.L.name}</h2>
@@ -300,7 +313,7 @@ function finish(){
       <button class="ghost" id="hm">回到關卡</button>
     </div></div>`;
   if(nextI!==null) $("#nl").onclick=()=>start(nextI);
-  $("#re").onclick=()=>start(S.i);
+  $("#re").onclick=S.again;
   $("#hm").onclick=home;
   window.scrollTo(0,0);
 }
